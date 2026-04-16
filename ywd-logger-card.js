@@ -1,10 +1,10 @@
-// logger-card.js v8.8
+// ywd-logger-card.js v8.8
 // UI Update: Added smart relative date/time formatting (Today, Yesterday, DD/MM)
 
 const DEFAULT_CONFIG = {
   title: "Logger",
   icon: "mdi:notebook-edit",
-  entity_id: "sensor.logger_data", 
+  entity_id: "sensor.ywd_logger_data",
   hidden_card: false,
   categories: [
     { name: "Health", icon: "mdi:medical-bag", color: "#E8A0BF", presets: ["Took medication"] },
@@ -65,8 +65,8 @@ class YWDLoggerCard extends HTMLElement {
     this._selectedCat = 0;
     this._entries = [];
     this._noteText = "";
-    this._userPresets = {}; 
-    
+    this._userPresets = {};
+
     window.addEventListener("hass-ywd-logger-open", () => {
       this._modalOpen = true;
       this._render();
@@ -84,64 +84,77 @@ class YWDLoggerCard extends HTMLElement {
     this._hass = hass;
     if (!this._config || !hass) return;
 
-    const stateObj = hass.states[this._config.entity_id || "sensor.logger_data"];
+    const stateObj = hass.states[this._config.entity_id || "sensor.ywd_logger_data"];
     if (stateObj?.attributes?.entries) {
-      const entries = typeof stateObj.attributes.entries === 'string' ? JSON.parse(stateObj.attributes.entries) : stateObj.attributes.entries;
-      const newEntries = entries.map(e => {
-        const cat = this._config.categories.find(c => c.name === e.category) || { icon: "mdi:tag", color: "#9E9E9E" };
+      const entries =
+        typeof stateObj.attributes.entries === "string"
+          ? JSON.parse(stateObj.attributes.entries)
+          : stateObj.attributes.entries;
+
+      const newEntries = entries.map((e) => {
+        const cat =
+          this._config.categories.find((c) => c.name === e.category) || {
+            icon: "mdi:tag",
+            color: "#9E9E9E",
+          };
         return { ...e, icon: cat.icon, color: cat.color };
       });
-      
+
       if (JSON.stringify(this._entries) !== JSON.stringify(newEntries)) {
         this._entries = newEntries;
-        if (this._modalOpen) this._updateEntriesList(); 
+        if (this._modalOpen) this._updateEntriesList();
       }
     }
   }
 
   getCardSize() {
-    return this._config?.hidden_card ? 0 : 1; 
+    return this._config?.hidden_card ? 0 : 1;
   }
 
   _loadLocalPresets() {
     try {
       const stored = localStorage.getItem(`ywd_logger_user_presets_${this._config.entity_id}`);
       this._userPresets = stored ? JSON.parse(stored) : {};
-    } catch { this._userPresets = {}; }
+    } catch {
+      this._userPresets = {};
+    }
   }
 
   _saveLocalPresets() {
-    localStorage.setItem(`ywd_logger_user_presets_${this._config.entity_id}`, JSON.stringify(this._userPresets));
+    localStorage.setItem(
+      `ywd_logger_user_presets_${this._config.entity_id}`,
+      JSON.stringify(this._userPresets)
+    );
   }
 
   _getMergedPresets(catName) {
-    const globalPresets = this._config.categories.find(c => c.name === catName)?.presets || [];
+    const globalPresets = this._config.categories.find((c) => c.name === catName)?.presets || [];
     const localPresets = this._userPresets[catName] || [];
-    return [...new Set([...globalPresets, ...localPresets])]; 
+    return [...new Set([...globalPresets, ...localPresets])];
   }
 
   _removeLocalPreset(catName, presetText) {
     if (this._userPresets[catName]) {
-      this._userPresets[catName] = this._userPresets[catName].filter(p => p !== presetText);
+      this._userPresets[catName] = this._userPresets[catName].filter((p) => p !== presetText);
       this._saveLocalPresets();
       this._render();
     }
   }
 
   async _deleteEntry(ts) {
-    this._entries = this._entries.filter(e => e.ts !== ts);
-    this._updateEntriesList(); 
-    await this._hass.callApi("POST", "events/logger_delete_entry", { ts });
+    this._entries = this._entries.filter((e) => e.ts !== ts);
+    this._updateEntriesList();
+    await this._hass.callApi("POST", "events/ywd_logger_delete_entry", { ts });
   }
 
   _closeModal() {
     const backdrop = this.shadowRoot.querySelector(".modal-backdrop");
     const modal = this.shadowRoot.querySelector(".modal");
-    
+
     if (backdrop && modal) {
       backdrop.style.animation = "fadeOut 0.2s ease forwards";
       modal.style.animation = "slideDown 0.2s ease forwards";
-      
+
       setTimeout(() => {
         this._modalOpen = false;
         this._noteText = "";
@@ -157,62 +170,61 @@ class YWDLoggerCard extends HTMLElement {
   async _submit() {
     const text = this.shadowRoot.querySelector(".log-input")?.value.trim();
     if (!text) return;
-    
+
     const cat = this._config.categories[this._selectedCat];
     const user = this._hass.user?.name || "Unknown";
     const saveBtn = this.shadowRoot.querySelector("#btn-save");
-    
+
     if (saveBtn) {
       saveBtn.textContent = "Saved ✓";
-      saveBtn.style.background = "var(--success-color, #4CAF50)"; 
+      saveBtn.style.background = "var(--success-color, #4CAF50)";
       saveBtn.style.color = "white";
     }
 
     this._hass.callService("logbook", "log", {
-      name: cat.name, message: `[${user}] ${text}`, entity_id: this._config.entity_id, domain: "ywd_logger_card"
+      name: cat.name,
+      message: `[${user}] ${text}`,
+      entity_id: this._config.entity_id,
+      domain: "ywd_logger_card",
     });
-    
-    setTimeout(() => { this._closeModal(); }, 1500);
+
+    setTimeout(() => {
+      this._closeModal();
+    }, 1500);
   }
 
-  // --- NEW SMART DATE FORMATTER ---
   _formatDate(ts) {
     const date = new Date(ts);
-    // Format the time as HH:MM
-    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-    // Get midnight today
+    const timeStr = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
-    // Get midnight yesterday
+
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
-    // Get midnight of the target date
+
     const targetDay = new Date(date);
     targetDay.setHours(0, 0, 0, 0);
-    
-    // Compare dates
+
     if (targetDay.getTime() === today.getTime()) {
       return `Today at ${timeStr}`;
     } else if (targetDay.getTime() === yesterday.getTime()) {
       return `Yesterday at ${timeStr}`;
     } else {
-      // Pad to ensure 02/05 instead of 2/5
-      const dd = String(date.getDate()).padStart(2, '0');
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, "0");
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
       return `${dd}/${mm} at ${timeStr}`;
     }
   }
-  // --------------------------------
 
   _updateEntriesList() {
     const list = this.shadowRoot.querySelector(".entries-section");
     if (!list) return;
-    
-    // Changed how the date is rendered using the new _formatDate function
-    list.innerHTML = this._entries.slice(0, 10).map(e => `
+
+    list.innerHTML = this._entries
+      .slice(0, 10)
+      .map(
+        (e) => `
       <div class="entry-item">
         <div class="entry-icon" style="background:${e.color}"><ha-icon icon="${e.icon}" style="--mdc-icon-size:18px"></ha-icon></div>
         <div style="flex:1; font-size:14px">
@@ -220,14 +232,18 @@ class YWDLoggerCard extends HTMLElement {
           <div style="font-size:11px; opacity:0.5">${e.user} • ${this._formatDate(e.ts)}</div>
         </div>
         <ha-icon icon="mdi:delete" class="entry-del" data-ts="${e.ts}"></ha-icon>
-      </div>`).join('');
+      </div>`
+      )
+      .join("");
 
-    this.shadowRoot.querySelectorAll(".entry-del").forEach(d => d.onclick = () => this._deleteEntry(parseInt(d.dataset.ts)));
+    this.shadowRoot
+      .querySelectorAll(".entry-del")
+      .forEach((d) => (d.onclick = () => this._deleteEntry(parseInt(d.dataset.ts))));
   }
 
   _render() {
     if (!this._config) return;
-    
+
     const cats = this._config.categories || [];
     const cat = cats[this._selectedCat] || cats[0] || { name: "Unknown" };
     const mergedPresets = this._getMergedPresets(cat.name);
@@ -235,16 +251,22 @@ class YWDLoggerCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${STYLES}</style>
       
-      ${!this._config.hidden_card ? `
+      ${
+        !this._config.hidden_card
+          ? `
         <ha-card id="open-tile">
           <div class="tile-face">
             <div class="tile-icon-wrap"><ha-icon icon="${this._config.icon}"></ha-icon></div>
             <div class="tile-title">${this._config.title}</div>
           </div>
         </ha-card>
-      ` : ''}
+      `
+          : ""
+      }
       
-      ${this._modalOpen ? `
+      ${
+        this._modalOpen
+          ? `
         <div class="modal-backdrop" id="backdrop">
           <div class="modal">
             <div class="modal-header">
@@ -254,13 +276,20 @@ class YWDLoggerCard extends HTMLElement {
             
             <div class="modal-content">
               <div class="cat-tabs">
-                ${cats.map((c, i) => `<div class="cat-tab ${i===this._selectedCat?'active':''}" style="${i===this._selectedCat?'background:'+c.color:''}" data-i="${i}">${c.name}</div>`).join('')}
+                ${cats
+                  .map(
+                    (c, i) =>
+                      `<div class="cat-tab ${i === this._selectedCat ? "active" : ""}" style="${
+                        i === this._selectedCat ? "background:" + c.color : ""
+                      }" data-i="${i}">${c.name}</div>`
+                  )
+                  .join("")}
               </div>
               
               <input type="text" 
                      class="log-input" 
-                     name="logger_message_input" 
-                     id="logger_message_input"
+                     name="ywd_logger_message_input" 
+                     id="ywd_logger_message_input"
                      placeholder="What's happening?" 
                      value="${this._noteText}" 
                      autocomplete="off" 
@@ -270,12 +299,20 @@ class YWDLoggerCard extends HTMLElement {
                      spellcheck="true">
               
               <div class="presets">
-                ${mergedPresets.map(p => `
+                ${mergedPresets
+                  .map(
+                    (p) => `
                   <div class="preset-chip">
                     <span class="preset-text" data-p="${p}">${p}</span>
-                    ${(this._userPresets[cat.name] || []).includes(p) ? `<ha-icon icon="mdi:close" class="del-local-preset" data-p="${p}"></ha-icon>` : ''}
+                    ${
+                      (this._userPresets[cat.name] || []).includes(p)
+                        ? `<ha-icon icon="mdi:close" class="del-local-preset" data-p="${p}"></ha-icon>`
+                        : ""
+                    }
                   </div>
-                `).join('')}
+                `
+                  )
+                  .join("")}
                 <div class="add-btn-circle" id="btn-add-preset" title="Save text as preset"><ha-icon icon="mdi:plus"></ha-icon></div>
               </div>
 
@@ -288,7 +325,9 @@ class YWDLoggerCard extends HTMLElement {
             </div>
           </div>
         </div>
-      ` : ''}
+      `
+          : ""
+      }
     `;
 
     if (this._modalOpen) {
@@ -298,62 +337,76 @@ class YWDLoggerCard extends HTMLElement {
       this.shadowRoot.querySelector("#close-x").onclick = () => this._closeModal();
       this.shadowRoot.querySelector("#btn-cancel").onclick = () => this._closeModal();
       this.shadowRoot.querySelector("#btn-save").onclick = () => this._submit();
-      
+
       const inputField = this.shadowRoot.querySelector(".log-input");
-      inputField.oninput = (e) => this._noteText = e.target.value;
+      inputField.oninput = (e) => (this._noteText = e.target.value);
       inputField.onkeypress = (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === "Enter") {
           e.preventDefault();
           this._submit();
         }
       };
-      
-      this.shadowRoot.querySelectorAll(".cat-tab").forEach(t => t.onclick = () => { 
-        this._selectedCat = parseInt(t.dataset.i); 
-        this._render(); 
-      });
-      
-      this.shadowRoot.querySelectorAll(".preset-text").forEach(p => p.onclick = () => { 
-        inputField.value = p.dataset.p; 
-        this._noteText = p.dataset.p; 
+
+      this.shadowRoot.querySelectorAll(".cat-tab").forEach((t) => {
+        t.onclick = () => {
+          this._selectedCat = parseInt(t.dataset.i);
+          this._render();
+        };
       });
 
-      this.shadowRoot.querySelectorAll(".del-local-preset").forEach(btn => btn.onclick = (e) => {
-        e.stopPropagation();
-        this._removeLocalPreset(cat.name, btn.dataset.p);
+      this.shadowRoot.querySelectorAll(".preset-text").forEach((p) => {
+        p.onclick = () => {
+          inputField.value = p.dataset.p;
+          this._noteText = p.dataset.p;
+        };
       });
-      
+
+      this.shadowRoot.querySelectorAll(".del-local-preset").forEach((btn) => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          this._removeLocalPreset(cat.name, btn.dataset.p);
+        };
+      });
+
       this.shadowRoot.querySelector("#btn-add-preset").onclick = () => {
         const v = inputField.value.trim();
-        if(v) { 
-          if(!this._userPresets[cat.name]) this._userPresets[cat.name] = []; 
-          if(!this._userPresets[cat.name].includes(v)) {
-            this._userPresets[cat.name].push(v); 
-            this._saveLocalPresets(); 
-            this._render(); 
+        if (v) {
+          if (!this._userPresets[cat.name]) this._userPresets[cat.name] = [];
+          if (!this._userPresets[cat.name].includes(v)) {
+            this._userPresets[cat.name].push(v);
+            this._saveLocalPresets();
+            this._render();
           }
         }
       };
     } else if (!this._config.hidden_card) {
-      this.shadowRoot.querySelector("#open-tile")?.addEventListener("click", () => { 
-        this._modalOpen = true; 
-        this._render(); 
+      this.shadowRoot.querySelector("#open-tile")?.addEventListener("click", () => {
+        this._modalOpen = true;
+        this._render();
       });
     }
   }
 
-  static getConfigElement() { return document.createElement("ywd-logger-card-editor"); }
-  static getStubConfig() { return { ...DEFAULT_CONFIG }; }
+  static getConfigElement() {
+    return document.createElement("ywd-logger-card-editor");
+  }
+
+  static getStubConfig() {
+    return { ...DEFAULT_CONFIG };
+  }
 }
 
 class YWDLoggerCardEditor extends HTMLElement {
-  constructor() { super(); this.attachShadow({ mode: "open" }); }
-  
-  setConfig(config) { 
-    this._config = JSON.parse(JSON.stringify({ ...DEFAULT_CONFIG, ...config })); 
-    this._render(); 
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
   }
-  
+
+  setConfig(config) {
+    this._config = JSON.parse(JSON.stringify({ ...DEFAULT_CONFIG, ...config }));
+    this._render();
+  }
+
   _render() {
     if (!this._config) return;
 
@@ -392,7 +445,9 @@ class YWDLoggerCardEditor extends HTMLElement {
         <h3 style="margin: 8px 0 0; color: var(--primary-text-color); font-weight: 400;">Categories</h3>
 
         <div style="display:flex; flex-direction:column; gap:16px;">
-          ${(this._config.categories || []).map((c, i) => `
+          ${(this._config.categories || [])
+            .map(
+              (c, i) => `
             <div class="cat-card">
               <div class="cat-header">
                 <h3>Category ${i + 1}</h3>
@@ -409,31 +464,87 @@ class YWDLoggerCardEditor extends HTMLElement {
                 </div>
               </div>
               
-              <ha-textfield label="Global Presets (Comma Separated)" class="c-pre" data-i="${i}" value="${(c.presets || []).join(', ')}"></ha-textfield>
+              <ha-textfield label="Global Presets (Comma Separated)" class="c-pre" data-i="${i}" value="${(c.presets || []).join(", ")}"></ha-textfield>
             </div>
-          `).join('')}
+          `
+            )
+            .join("")}
         </div>
         
         <button class="add-btn" id="add-cat-btn">+ Add Category</button>
       </div>
     `;
 
-    const fire = () => this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
-    
-    this.shadowRoot.querySelector("#hidden_card").addEventListener("change", (e) => { this._config.hidden_card = e.target.checked; fire(); });
-    
-    this.shadowRoot.querySelectorAll("ha-textfield[id]").forEach(el => el.addEventListener("change", () => {
-        if(el.id) this._config[el.id] = el.value;
+    const fire = () =>
+      this.dispatchEvent(
+        new CustomEvent("config-changed", {
+          detail: { config: this._config },
+          bubbles: true,
+          composed: true,
+        })
+      );
+
+    this.shadowRoot.querySelector("#hidden_card").addEventListener("change", (e) => {
+      this._config.hidden_card = e.target.checked;
+      fire();
+    });
+
+    this.shadowRoot.querySelectorAll("ha-textfield[id]").forEach((el) =>
+      el.addEventListener("change", () => {
+        if (el.id) this._config[el.id] = el.value;
         fire();
-    }));
-    
-    this.shadowRoot.querySelectorAll(".c-name").forEach(el => el.addEventListener("change", () => { this._config.categories[el.dataset.i].name = el.value; fire(); }));
-    this.shadowRoot.querySelectorAll(".c-icon").forEach(el => el.addEventListener("value-changed", (e) => { this._config.categories[el.dataset.i].icon = e.detail.value; fire(); }));
-    this.shadowRoot.querySelectorAll(".c-color").forEach(el => el.addEventListener("change", (e) => { this._config.categories[el.dataset.i].color = e.target.value; fire(); }));
-    this.shadowRoot.querySelectorAll(".c-pre").forEach(el => el.addEventListener("change", () => { this._config.categories[el.dataset.i].presets = el.value.split(',').map(p => p.trim()).filter(Boolean); fire(); }));
-    
-    this.shadowRoot.querySelectorAll(".del-icon").forEach(btn => btn.addEventListener("click", () => { this._config.categories.splice(btn.dataset.i, 1); fire(); this._render(); }));
-    this.shadowRoot.querySelector("#add-cat-btn").addEventListener("click", () => { this._config.categories.push({name: "New Category", icon: "mdi:tag", color: "#9E9E9E", presets: []}); fire(); this._render(); });
+      })
+    );
+
+    this.shadowRoot.querySelectorAll(".c-name").forEach((el) =>
+      el.addEventListener("change", () => {
+        this._config.categories[el.dataset.i].name = el.value;
+        fire();
+      })
+    );
+
+    this.shadowRoot.querySelectorAll(".c-icon").forEach((el) =>
+      el.addEventListener("value-changed", (e) => {
+        this._config.categories[el.dataset.i].icon = e.detail.value;
+        fire();
+      })
+    );
+
+    this.shadowRoot.querySelectorAll(".c-color").forEach((el) =>
+      el.addEventListener("change", (e) => {
+        this._config.categories[el.dataset.i].color = e.target.value;
+        fire();
+      })
+    );
+
+    this.shadowRoot.querySelectorAll(".c-pre").forEach((el) =>
+      el.addEventListener("change", () => {
+        this._config.categories[el.dataset.i].presets = el.value
+          .split(",")
+          .map((p) => p.trim())
+          .filter(Boolean);
+        fire();
+      })
+    );
+
+    this.shadowRoot.querySelectorAll(".del-icon").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        this._config.categories.splice(btn.dataset.i, 1);
+        fire();
+        this._render();
+      })
+    );
+
+    this.shadowRoot.querySelector("#add-cat-btn").addEventListener("click", () => {
+      this._config.categories.push({
+        name: "New Category",
+        icon: "mdi:tag",
+        color: "#9E9E9E",
+        presets: [],
+      });
+      fire();
+      this._render();
+    });
   }
 }
 
@@ -441,4 +552,8 @@ customElements.define("ywd-logger-card", YWDLoggerCard);
 customElements.define("ywd-logger-card-editor", YWDLoggerCardEditor);
 
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "ywd-logger-card", name: "YWD Logger Card", preview: true });
+window.customCards.push({
+  type: "ywd-logger-card",
+  name: "YWD Logger Card",
+  preview: true,
+});
