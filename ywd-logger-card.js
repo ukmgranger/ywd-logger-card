@@ -221,7 +221,8 @@ class YWDLoggerCard extends HTMLElement {
     const list = this.shadowRoot.querySelector(".entries-section");
     if (!list) return;
 
-    list.innerHTML = this._entries
+    list.innerHTML = [...this._entries]
+      .sort((a, b) => b.ts - a.ts)
       .slice(0, 10)
       .map(
         (e) => `
